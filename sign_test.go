@@ -200,8 +200,8 @@ func TestSignedDataWithContentType(t *testing.T) {
 	}
 
 	// Add the signing cert and private key
-	if err := signedData.AddSigner(cert.Certificate, cert.PrivateKey, SignerInfoConfig{}); err != nil {
-		fmt.Printf("Cannot add signer: %s", err)
+	if err := signedData.AddSignerNoChain(cert.Certificate, *cert.PrivateKey, SignerInfoConfig{}); err != nil {
+		t.Fatalf("Cannot add signer: %s", err)
 	}
 
 	// Finish() to obtain the signature bytes
