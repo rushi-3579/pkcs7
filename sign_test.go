@@ -186,6 +186,35 @@ func ExampleSignedData() {
 	pem.Encode(os.Stdout, &pem.Block{Type: "PKCS7", Bytes: detachedSignature})
 }
 
+func TestSetContentType(t *testing.T) {
+	cert, err := createTestCertificate(x509.SHA256WithRSA)
+	if err != nil {
+		t.Fatalf("Cannot create test certificates: %s", err)
+	}
+
+	signedData, err := NewSignedData([]byte("Example data to be signed"))
+	if err != nil {
+		t.Fatalf("Cannot initialize signed data: %s", err)
+	}
+
+	idctTSTInfo := asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 16, 1, 4}
+	signedData.SetContentType(idctTSTInfo)
+
+	if err := signedData.AddSigner(cert.Certificate, *cert.PrivateKey, SignerInfoConfig{}); err != nil {
+		t.Fatalf("Cannot add signer: %s", err)
+	}
+
+	_, err = signedData.Finish()
+	if err != nil {
+		t.Fatalf("Cannot finish signing data: %s", err)
+	}
+
+	sd := signedData.GetSignedData()
+	if !sd.ContentInfo.ContentType.Equal(idctTSTInfo) {
+		t.Fatalf("Unexpected content type: %s", err)
+	}
+}
+
 func TestUnmarshalSignedAttribute(t *testing.T) {
 	cert, err := createTestCertificate(x509.SHA512WithRSA)
 	if err != nil {
