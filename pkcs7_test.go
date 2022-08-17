@@ -2,8 +2,8 @@ package pkcs7
 
 import (
 	"crypto"
-	"crypto/dsa"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -132,8 +132,8 @@ func createTestCertificateByIssuer(name string, issuer *certKeyPair, sigAlg x509
 			template.SignatureAlgorithm = x509.SHA1WithRSA
 		case *ecdsa.PrivateKey:
 			template.SignatureAlgorithm = x509.ECDSAWithSHA1
-		case *dsa.PrivateKey:
-			template.SignatureAlgorithm = x509.DSAWithSHA1
+		case ed25519.PrivateKey:
+			template.SignatureAlgorithm = x509.PureEd25519
 		}
 	case x509.SHA256WithRSA:
 		priv = test2048Key
@@ -142,8 +142,8 @@ func createTestCertificateByIssuer(name string, issuer *certKeyPair, sigAlg x509
 			template.SignatureAlgorithm = x509.SHA256WithRSA
 		case *ecdsa.PrivateKey:
 			template.SignatureAlgorithm = x509.ECDSAWithSHA256
-		case *dsa.PrivateKey:
-			template.SignatureAlgorithm = x509.DSAWithSHA256
+		case ed25519.PrivateKey:
+			template.SignatureAlgorithm = x509.PureEd25519
 		}
 	case x509.SHA384WithRSA:
 		priv = test3072Key
@@ -152,8 +152,8 @@ func createTestCertificateByIssuer(name string, issuer *certKeyPair, sigAlg x509
 			template.SignatureAlgorithm = x509.SHA384WithRSA
 		case *ecdsa.PrivateKey:
 			template.SignatureAlgorithm = x509.ECDSAWithSHA384
-		case *dsa.PrivateKey:
-			template.SignatureAlgorithm = x509.DSAWithSHA256
+		case ed25519.PrivateKey:
+			template.SignatureAlgorithm = x509.PureEd25519
 		}
 	case x509.SHA512WithRSA:
 		priv = test4096Key
@@ -162,8 +162,8 @@ func createTestCertificateByIssuer(name string, issuer *certKeyPair, sigAlg x509
 			template.SignatureAlgorithm = x509.SHA512WithRSA
 		case *ecdsa.PrivateKey:
 			template.SignatureAlgorithm = x509.ECDSAWithSHA512
-		case *dsa.PrivateKey:
-			template.SignatureAlgorithm = x509.DSAWithSHA256
+		case ed25519.PrivateKey:
+			template.SignatureAlgorithm = x509.PureEd25519
 		}
 	case x509.ECDSAWithSHA1:
 		priv, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -175,8 +175,8 @@ func createTestCertificateByIssuer(name string, issuer *certKeyPair, sigAlg x509
 			template.SignatureAlgorithm = x509.SHA1WithRSA
 		case *ecdsa.PrivateKey:
 			template.SignatureAlgorithm = x509.ECDSAWithSHA1
-		case *dsa.PrivateKey:
-			template.SignatureAlgorithm = x509.DSAWithSHA1
+		case ed25519.PrivateKey:
+			template.SignatureAlgorithm = x509.PureEd25519
 		}
 	case x509.ECDSAWithSHA256:
 		priv, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -188,8 +188,8 @@ func createTestCertificateByIssuer(name string, issuer *certKeyPair, sigAlg x509
 			template.SignatureAlgorithm = x509.SHA256WithRSA
 		case *ecdsa.PrivateKey:
 			template.SignatureAlgorithm = x509.ECDSAWithSHA256
-		case *dsa.PrivateKey:
-			template.SignatureAlgorithm = x509.DSAWithSHA256
+		case ed25519.PrivateKey:
+			template.SignatureAlgorithm = x509.PureEd25519
 		}
 	case x509.ECDSAWithSHA384:
 		priv, err = ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
@@ -201,8 +201,8 @@ func createTestCertificateByIssuer(name string, issuer *certKeyPair, sigAlg x509
 			template.SignatureAlgorithm = x509.SHA384WithRSA
 		case *ecdsa.PrivateKey:
 			template.SignatureAlgorithm = x509.ECDSAWithSHA384
-		case *dsa.PrivateKey:
-			template.SignatureAlgorithm = x509.DSAWithSHA256
+		case ed25519.PrivateKey:
+			template.SignatureAlgorithm = x509.PureEd25519
 		}
 	case x509.ECDSAWithSHA512:
 		priv, err = ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
@@ -214,29 +214,22 @@ func createTestCertificateByIssuer(name string, issuer *certKeyPair, sigAlg x509
 			template.SignatureAlgorithm = x509.SHA512WithRSA
 		case *ecdsa.PrivateKey:
 			template.SignatureAlgorithm = x509.ECDSAWithSHA512
-		case *dsa.PrivateKey:
-			template.SignatureAlgorithm = x509.DSAWithSHA256
+		case ed25519.PrivateKey:
+			template.SignatureAlgorithm = x509.PureEd25519
 		}
-	case x509.DSAWithSHA1:
-		var dsaPriv dsa.PrivateKey
-		params := &dsaPriv.Parameters
-		err = dsa.GenerateParameters(params, rand.Reader, dsa.L1024N160)
-		if err != nil {
-			return nil, err
-		}
-		err = dsa.GenerateKey(&dsaPriv, rand.Reader)
+	case x509.PureEd25519:
+		_, priv, err = ed25519.GenerateKey(rand.Reader)
 		if err != nil {
 			return nil, err
 		}
 		switch issuerKey.(type) {
 		case *rsa.PrivateKey:
-			template.SignatureAlgorithm = x509.SHA1WithRSA
+			template.SignatureAlgorithm = x509.SHA256WithRSA
 		case *ecdsa.PrivateKey:
-			template.SignatureAlgorithm = x509.ECDSAWithSHA1
-		case *dsa.PrivateKey:
-			template.SignatureAlgorithm = x509.DSAWithSHA1
+			template.SignatureAlgorithm = x509.ECDSAWithSHA256
+		case ed25519.PrivateKey:
+			template.SignatureAlgorithm = x509.PureEd25519
 		}
-		priv = &dsaPriv
 	}
 	if isCA {
 		template.IsCA = true
@@ -252,32 +245,31 @@ func createTestCertificateByIssuer(name string, issuer *certKeyPair, sigAlg x509
 	log.Println("creating cert", name, "issued by", issuerCert.Subject.CommonName, "with sigalg", sigAlg)
 	switch priv.(type) {
 	case *rsa.PrivateKey:
-		switch issuerKey.(type) {
-		case *rsa.PrivateKey:
-			derCert, err = x509.CreateCertificate(rand.Reader, &template, issuerCert, priv.(*rsa.PrivateKey).Public(), issuerKey.(*rsa.PrivateKey))
-		case *ecdsa.PrivateKey:
-			derCert, err = x509.CreateCertificate(rand.Reader, &template, issuerCert, priv.(*rsa.PrivateKey).Public(), issuerKey.(*ecdsa.PrivateKey))
-		case *dsa.PrivateKey:
-			derCert, err = x509.CreateCertificate(rand.Reader, &template, issuerCert, priv.(*rsa.PrivateKey).Public(), issuerKey.(*dsa.PrivateKey))
-		}
-	case *ecdsa.PrivateKey:
-		switch issuerKey.(type) {
-		case *rsa.PrivateKey:
-			derCert, err = x509.CreateCertificate(rand.Reader, &template, issuerCert, priv.(*ecdsa.PrivateKey).Public(), issuerKey.(*rsa.PrivateKey))
-		case *ecdsa.PrivateKey:
-			derCert, err = x509.CreateCertificate(rand.Reader, &template, issuerCert, priv.(*ecdsa.PrivateKey).Public(), issuerKey.(*ecdsa.PrivateKey))
-		case *dsa.PrivateKey:
-			derCert, err = x509.CreateCertificate(rand.Reader, &template, issuerCert, priv.(*ecdsa.PrivateKey).Public(), issuerKey.(*dsa.PrivateKey))
-		}
-	case *dsa.PrivateKey:
-		pub := &priv.(*dsa.PrivateKey).PublicKey
 		switch issuerKey := issuerKey.(type) {
 		case *rsa.PrivateKey:
-			derCert, err = x509.CreateCertificate(rand.Reader, &template, issuerCert, pub, issuerKey)
+			derCert, err = x509.CreateCertificate(rand.Reader, &template, issuerCert, priv.(*rsa.PrivateKey).Public(), issuerKey)
 		case *ecdsa.PrivateKey:
-			derCert, err = x509.CreateCertificate(rand.Reader, &template, issuerCert, priv.(*dsa.PublicKey), issuerKey)
-		case *dsa.PrivateKey:
-			derCert, err = x509.CreateCertificate(rand.Reader, &template, issuerCert, priv.(*dsa.PublicKey), issuerKey)
+			derCert, err = x509.CreateCertificate(rand.Reader, &template, issuerCert, priv.(*rsa.PrivateKey).Public(), issuerKey)
+		case ed25519.PrivateKey:
+			derCert, err = x509.CreateCertificate(rand.Reader, &template, issuerCert, priv.(*rsa.PrivateKey).Public(), issuerKey)
+		}
+	case *ecdsa.PrivateKey:
+		switch issuerKey := issuerKey.(type) {
+		case *rsa.PrivateKey:
+			derCert, err = x509.CreateCertificate(rand.Reader, &template, issuerCert, priv.(*ecdsa.PrivateKey).Public(), issuerKey)
+		case *ecdsa.PrivateKey:
+			derCert, err = x509.CreateCertificate(rand.Reader, &template, issuerCert, priv.(*ecdsa.PrivateKey).Public(), issuerKey)
+		case ed25519.PrivateKey:
+			derCert, err = x509.CreateCertificate(rand.Reader, &template, issuerCert, priv.(*ecdsa.PrivateKey).Public(), issuerKey)
+		}
+	case ed25519.PrivateKey:
+		switch issuerKey := issuerKey.(type) {
+		case *rsa.PrivateKey:
+			derCert, err = x509.CreateCertificate(rand.Reader, &template, issuerCert, priv.(ed25519.PrivateKey).Public(), issuerKey)
+		case *ecdsa.PrivateKey:
+			derCert, err = x509.CreateCertificate(rand.Reader, &template, issuerCert, priv.(ed25519.PrivateKey).Public(), issuerKey)
+		case ed25519.PrivateKey:
+			derCert, err = x509.CreateCertificate(rand.Reader, &template, issuerCert, priv.(ed25519.PrivateKey).Public(), issuerKey)
 		}
 	}
 	if err != nil {

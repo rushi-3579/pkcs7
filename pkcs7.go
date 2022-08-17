@@ -4,8 +4,8 @@ package pkcs7
 import (
 	"bytes"
 	"crypto"
-	"crypto/dsa"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -73,6 +73,8 @@ var (
 	OIDEncryptionAlgorithmECDSAP384 = asn1.ObjectIdentifier{1, 3, 132, 0, 34}
 	OIDEncryptionAlgorithmECDSAP521 = asn1.ObjectIdentifier{1, 3, 132, 0, 35}
 
+	OIDEncryptionAlgorithmEDDSA25519 = asn1.ObjectIdentifier{1, 3, 101, 112}
+
 	// Encryption Algorithms
 	OIDEncryptionAlgorithmDESCBC     = asn1.ObjectIdentifier{1, 3, 14, 3, 2, 7}
 	OIDEncryptionAlgorithmDESEDE3CBC = asn1.ObjectIdentifier{1, 2, 840, 113549, 3, 7}
@@ -108,17 +110,17 @@ func getDigestOIDForSignatureAlgorithm(digestAlg x509.SignatureAlgorithm) (asn1.
 		return OIDDigestAlgorithmSHA256, nil
 	case x509.SHA384WithRSA, x509.ECDSAWithSHA384:
 		return OIDDigestAlgorithmSHA384, nil
-	case x509.SHA512WithRSA, x509.ECDSAWithSHA512:
+	case x509.SHA512WithRSA, x509.ECDSAWithSHA512, x509.PureEd25519:
 		return OIDDigestAlgorithmSHA512, nil
 	}
 	return nil, fmt.Errorf("pkcs7: cannot convert hash to oid, unknown hash algorithm")
 }
 
-// getOIDForEncryptionAlgorithm takes the private key type of the signer and
+// getOIDForEncryptionAlgorithm takes the public key of the signer and
 // the OID of a digest algorithm to return the appropriate signerInfo.DigestEncryptionAlgorithm
-func getOIDForEncryptionAlgorithm(pkey crypto.PrivateKey, OIDDigestAlg asn1.ObjectIdentifier) (asn1.ObjectIdentifier, error) {
-	switch pkey.(type) {
-	case *rsa.PrivateKey:
+func getOIDForEncryptionAlgorithm(signer crypto.Signer, OIDDigestAlg asn1.ObjectIdentifier) (asn1.ObjectIdentifier, error) {
+	switch signer.Public().(type) {
+	case *rsa.PublicKey:
 		switch {
 		default:
 			return OIDEncryptionAlgorithmRSA, nil
@@ -133,7 +135,7 @@ func getOIDForEncryptionAlgorithm(pkey crypto.PrivateKey, OIDDigestAlg asn1.Obje
 		case OIDDigestAlg.Equal(OIDDigestAlgorithmSHA512):
 			return OIDEncryptionAlgorithmRSASHA512, nil
 		}
-	case *ecdsa.PrivateKey:
+	case *ecdsa.PublicKey:
 		switch {
 		case OIDDigestAlg.Equal(OIDDigestAlgorithmSHA1):
 			return OIDDigestAlgorithmECDSASHA1, nil
@@ -144,11 +146,10 @@ func getOIDForEncryptionAlgorithm(pkey crypto.PrivateKey, OIDDigestAlg asn1.Obje
 		case OIDDigestAlg.Equal(OIDDigestAlgorithmSHA512):
 			return OIDDigestAlgorithmECDSASHA512, nil
 		}
-	case *dsa.PrivateKey:
-		return OIDDigestAlgorithmDSA, nil
+	case ed25519.PublicKey:
+		return OIDEncryptionAlgorithmEDDSA25519, nil
 	}
-	return nil, fmt.Errorf("pkcs7: cannot convert encryption algorithm to oid, unknown private key type %T", pkey)
-
+	return nil, fmt.Errorf("pkcs7: cannot convert encryption algorithm to oid, unknown public key type %T", signer.Public())
 }
 
 // Parse decodes a DER encoded PKCS7 package
