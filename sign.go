@@ -111,10 +111,11 @@ func (sd *SignedData) SetEncryptionAlgorithm(d asn1.ObjectIdentifier) {
 	sd.encryptionOid = d
 }
 
-// AddSigner is a wrapper around AddSignerChain() that adds a signer without any parent.
-func (sd *SignedData) AddSigner(ee *x509.Certificate, signer interface{}, config SignerInfoConfig) error {
+// AddSigner is a wrapper around AddSignerChain() that adds a signer without any parent. The signer can
+// either be a crypto.Signer or crypto.PrivateKey.
+func (sd *SignedData) AddSigner(ee *x509.Certificate, keyOrSigner interface{}, config SignerInfoConfig) error {
 	var parents []*x509.Certificate
-	return sd.AddSignerChain(ee, signer, parents, config)
+	return sd.AddSignerChain(ee, keyOrSigner, parents, config)
 }
 
 // AddSignerChain signs attributes about the content and adds certificates
@@ -124,8 +125,8 @@ func (sd *SignedData) AddSigner(ee *x509.Certificate, signer interface{}, config
 // certifications can be specified in the parents slice.
 //
 // The signature algorithm used to hash the data is the one of the end-entity
-// certificate.
-func (sd *SignedData) AddSignerChain(ee *x509.Certificate, signer interface{}, parents []*x509.Certificate, config SignerInfoConfig) error {
+// certificate. The signer can be either a crypto.Signer or crypto.PrivateKey.
+func (sd *SignedData) AddSignerChain(ee *x509.Certificate, keyOrSigner interface{}, parents []*x509.Certificate, config SignerInfoConfig) error {
 	// Following RFC 2315, 9.2 SignerInfo type, the distinguished name of
 	// the issuer of the end-entity signer is stored in the issuerAndSerialNumber
 	// section of the SignedData.SignerInfo, alongside the serial number of
@@ -153,7 +154,7 @@ func (sd *SignedData) AddSignerChain(ee *x509.Certificate, signer interface{}, p
 	h := hash.New()
 	h.Write(sd.data)
 	sd.messageDigest = h.Sum(nil)
-	encryptionOid, err := getOIDForEncryptionAlgorithm(signer, sd.digestOid)
+	encryptionOid, err := getOIDForEncryptionAlgorithm(keyOrSigner, sd.digestOid)
 	if err != nil {
 		return err
 	}
@@ -177,7 +178,7 @@ func (sd *SignedData) AddSignerChain(ee *x509.Certificate, signer interface{}, p
 		return err
 	}
 	// create signature of signed attributes
-	signature, err := signAttributes(finalAttrs, signer, hash)
+	signature, err := signAttributes(finalAttrs, keyOrSigner, hash)
 	if err != nil {
 		return err
 	}
@@ -206,7 +207,7 @@ func (sd *SignedData) AddSignerChain(ee *x509.Certificate, signer interface{}, p
 //
 // This function is needed to sign old Android APKs, something you probably
 // shouldn't do unless you're maintaining backward compatibility for old
-// applications.
+// applications. The signer can be either a crypto.Signer or crypto.PrivateKey.
 func (sd *SignedData) SignWithoutAttr(ee *x509.Certificate, keyOrSigner interface{}, config SignerInfoConfig) error {
 	var signature []byte
 	sd.sd.DigestAlgorithmIdentifiers = append(sd.sd.DigestAlgorithmIdentifiers, pkix.AlgorithmIdentifier{Algorithm: sd.digestOid})
