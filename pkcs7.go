@@ -4,6 +4,7 @@ package pkcs7
 import (
 	"bytes"
 	"crypto"
+	"crypto/dsa"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
@@ -116,9 +117,18 @@ func getDigestOIDForSignatureAlgorithm(digestAlg x509.SignatureAlgorithm) (asn1.
 	return nil, fmt.Errorf("pkcs7: cannot convert hash to oid, unknown hash algorithm")
 }
 
-// getOIDForEncryptionAlgorithm takes the public key of the signer and
+// getOIDForEncryptionAlgorithm takes a private key or signer and
 // the OID of a digest algorithm to return the appropriate signerInfo.DigestEncryptionAlgorithm
-func getOIDForEncryptionAlgorithm(signer crypto.Signer, OIDDigestAlg asn1.ObjectIdentifier) (asn1.ObjectIdentifier, error) {
+func getOIDForEncryptionAlgorithm(keyOrSigner interface{}, OIDDigestAlg asn1.ObjectIdentifier) (asn1.ObjectIdentifier, error) {
+	_, ok := keyOrSigner.(*dsa.PrivateKey)
+	if ok {
+		return OIDDigestAlgorithmDSA, nil
+	}
+
+	signer, ok := keyOrSigner.(crypto.Signer)
+	if !ok {
+		return nil, errors.New("pkcs7: key does not implement crypto.Signer")
+	}
 	switch signer.Public().(type) {
 	case *rsa.PublicKey:
 		switch {
@@ -149,7 +159,7 @@ func getOIDForEncryptionAlgorithm(signer crypto.Signer, OIDDigestAlg asn1.Object
 	case ed25519.PublicKey:
 		return OIDEncryptionAlgorithmEDDSA25519, nil
 	}
-	return nil, fmt.Errorf("pkcs7: cannot convert encryption algorithm to oid, unknown public key type %T", signer.Public())
+	return nil, fmt.Errorf("pkcs7: cannot convert encryption algorithm to oid, unknown key type %T", signer.Public())
 }
 
 // Parse decodes a DER encoded PKCS7 package

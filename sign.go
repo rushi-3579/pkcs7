@@ -3,11 +3,13 @@ package pkcs7
 import (
 	"bytes"
 	"crypto"
+	"crypto/dsa"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -110,7 +112,7 @@ func (sd *SignedData) SetEncryptionAlgorithm(d asn1.ObjectIdentifier) {
 }
 
 // AddSigner is a wrapper around AddSignerChain() that adds a signer without any parent.
-func (sd *SignedData) AddSigner(ee *x509.Certificate, signer crypto.Signer, config SignerInfoConfig) error {
+func (sd *SignedData) AddSigner(ee *x509.Certificate, signer interface{}, config SignerInfoConfig) error {
 	var parents []*x509.Certificate
 	return sd.AddSignerChain(ee, signer, parents, config)
 }
@@ -123,7 +125,7 @@ func (sd *SignedData) AddSigner(ee *x509.Certificate, signer crypto.Signer, conf
 //
 // The signature algorithm used to hash the data is the one of the end-entity
 // certificate.
-func (sd *SignedData) AddSignerChain(ee *x509.Certificate, signer crypto.Signer, parents []*x509.Certificate, config SignerInfoConfig) error {
+func (sd *SignedData) AddSignerChain(ee *x509.Certificate, signer interface{}, parents []*x509.Certificate, config SignerInfoConfig) error {
 	// Following RFC 2315, 9.2 SignerInfo type, the distinguished name of
 	// the issuer of the end-entity signer is stored in the issuerAndSerialNumber
 	// section of the SignedData.SignerInfo, alongside the serial number of
@@ -205,7 +207,7 @@ func (sd *SignedData) AddSignerChain(ee *x509.Certificate, signer crypto.Signer,
 // This function is needed to sign old Android APKs, something you probably
 // shouldn't do unless you're maintaining backward compatibility for old
 // applications.
-func (sd *SignedData) SignWithoutAttr(ee *x509.Certificate, signer crypto.Signer, config SignerInfoConfig) error {
+func (sd *SignedData) SignWithoutAttr(ee *x509.Certificate, keyOrSigner interface{}, config SignerInfoConfig) error {
 	var signature []byte
 	sd.sd.DigestAlgorithmIdentifiers = append(sd.sd.DigestAlgorithmIdentifiers, pkix.AlgorithmIdentifier{Algorithm: sd.digestOid})
 	hash, err := getHashForOID(sd.digestOid)
@@ -216,14 +218,33 @@ func (sd *SignedData) SignWithoutAttr(ee *x509.Certificate, signer crypto.Signer
 	h.Write(sd.data)
 	sd.messageDigest = h.Sum(nil)
 
-	// special case for Ed25519, which hashes as part of the signing algorithm
-	_, ok := signer.Public().(ed25519.PublicKey)
-	if ok {
-		signature, err = signer.Sign(rand.Reader, sd.data, crypto.Hash(0))
-	} else {
-		signature, err = signer.Sign(rand.Reader, sd.messageDigest, hash)
+	switch pkey := keyOrSigner.(type) {
+	case *dsa.PrivateKey:
+		// dsa doesn't implement crypto.Signer so we make a special case
+		// https://github.com/golang/go/issues/27889
+		r, s, err := dsa.Sign(rand.Reader, pkey, sd.messageDigest)
 		if err != nil {
 			return err
+		}
+		signature, err = asn1.Marshal(dsaSignature{r, s})
+		if err != nil {
+			return err
+		}
+	default:
+		signer, ok := keyOrSigner.(crypto.Signer)
+		if !ok {
+			return errors.New("pkcs7: private key does not implement crypto.Signer")
+		}
+
+		// special case for Ed25519, which hashes as part of the signing algorithm
+		_, ok = signer.Public().(ed25519.PublicKey)
+		if ok {
+			signature, err = signer.Sign(rand.Reader, sd.data, crypto.Hash(0))
+		} else {
+			signature, err = signer.Sign(rand.Reader, sd.messageDigest, hash)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -234,7 +255,7 @@ func (sd *SignedData) SignWithoutAttr(ee *x509.Certificate, signer crypto.Signer
 	if sd.encryptionOid == nil {
 		// if the encryption algorithm wasn't set by SetEncryptionAlgorithm,
 		// infer it from the digest algorithm
-		sd.encryptionOid, err = getOIDForEncryptionAlgorithm(signer, sd.digestOid)
+		sd.encryptionOid, err = getOIDForEncryptionAlgorithm(keyOrSigner, sd.digestOid)
 	}
 	if err != nil {
 		return err
@@ -348,23 +369,42 @@ func cert2issuerAndSerial(cert *x509.Certificate) (issuerAndSerial, error) {
 }
 
 // signs the DER encoded form of the attributes with the private key
-func signAttributes(attrs []attribute, signer crypto.Signer, digestAlg crypto.Hash) ([]byte, error) {
+func signAttributes(attrs []attribute, keyOrSigner interface{}, digestAlg crypto.Hash) ([]byte, error) {
 	attrBytes, err := marshalAttributes(attrs)
 	if err != nil {
 		return nil, err
 	}
-
-	// special case for Ed25519, which hashes as part of the signing algorithm
-	_, ok := signer.Public().(ed25519.PublicKey)
-	if ok {
-		return signer.Sign(rand.Reader, attrBytes, crypto.Hash(0))
-	}
-
 	h := digestAlg.New()
 	h.Write(attrBytes)
 	hash := h.Sum(nil)
 
+	// dsa doesn't implement crypto.Signer so we make a special case
+	// https://github.com/golang/go/issues/27889
+	switch pkey := keyOrSigner.(type) {
+	case *dsa.PrivateKey:
+		r, s, err := dsa.Sign(rand.Reader, pkey, hash)
+		if err != nil {
+			return nil, err
+		}
+		return asn1.Marshal(dsaSignature{r, s})
+	}
+
+	signer, ok := keyOrSigner.(crypto.Signer)
+	if !ok {
+		return nil, errors.New("pkcs7: private key does not implement crypto.Signer")
+	}
+
+	// special case for Ed25519, which hashes as part of the signing algorithm
+	_, ok = signer.Public().(ed25519.PublicKey)
+	if ok {
+		return signer.Sign(rand.Reader, attrBytes, crypto.Hash(0))
+	}
+
 	return signer.Sign(rand.Reader, hash, digestAlg)
+}
+
+type dsaSignature struct {
+	R, S *big.Int
 }
 
 // concats and wraps the certificates in the RawValue structure
