@@ -240,7 +240,7 @@ func ExampleSignedData() {
 	}
 
 	// Add the signing cert and private key
-	if err := signedData.AddSigner(cert.Certificate, *cert.PrivateKey, SignerInfoConfig{}); err != nil {
+	if err := signedData.AddSigner(cert.Certificate, cert.PrivateKey, SignerInfoConfig{}); err != nil {
 		fmt.Printf("Cannot add signer: %s", err)
 	}
 
