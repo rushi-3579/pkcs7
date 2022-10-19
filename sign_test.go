@@ -2,6 +2,7 @@ package pkcs7
 
 import (
 	"bytes"
+	"crypto"
 	"crypto/dsa"
 	"crypto/x509"
 	"encoding/asn1"
@@ -25,6 +26,7 @@ func TestSign(t *testing.T) {
 		x509.ECDSAWithSHA256,
 		x509.ECDSAWithSHA384,
 		x509.ECDSAWithSHA512,
+		x509.PureEd25519,
 	}
 	for _, sigalgroot := range sigalgs {
 		rootCert, err := createTestCertificateByIssuer("PKCS7 Test Root CA", nil, sigalgroot, true)
@@ -154,6 +156,74 @@ func TestDSASignAndVerifyWithOpenSSL(t *testing.T) {
 	os.Remove(tmpSignatureFile.Name())  // clean up
 	os.Remove(tmpContentFile.Name())    // clean up
 	os.Remove(tmpSignerCertFile.Name()) // clean up
+}
+
+func TestSignWithoutAttributes(t *testing.T) {
+	content := []byte("Hello World")
+	sigalgs := []x509.SignatureAlgorithm{
+		x509.SHA1WithRSA,
+		x509.SHA256WithRSA,
+		x509.SHA512WithRSA,
+		x509.ECDSAWithSHA1,
+		x509.ECDSAWithSHA256,
+		x509.ECDSAWithSHA384,
+		x509.ECDSAWithSHA512,
+		x509.PureEd25519,
+	}
+	for _, sigalgroot := range sigalgs {
+		rootCert, err := createTestCertificateByIssuer("PKCS7 Test Root CA", nil, sigalgroot, true)
+		if err != nil {
+			t.Fatalf("test %s: cannot generate root cert: %s", sigalgroot, err)
+		}
+		truststore := x509.NewCertPool()
+		truststore.AddCert(rootCert.Certificate)
+		for _, sigalgsigner := range sigalgs {
+			signerCert, err := createTestCertificateByIssuer("PKCS7 Test Signer Cert", rootCert, sigalgsigner, false)
+			if err != nil {
+				t.Fatalf("test %s/%s: cannot generate signer cert: %s", sigalgroot, sigalgsigner, err)
+			}
+			for _, testDetach := range []bool{false, true} {
+				log.Printf("test %s/%s/%s detached %t\n", sigalgroot, sigalgroot, sigalgsigner, testDetach)
+				toBeSigned, err := NewSignedData(content)
+				if err != nil {
+					t.Fatalf("test %s/%s: cannot initialize signed data: %s", sigalgroot, sigalgsigner, err)
+				}
+
+				// Set the digest to match the end entity cert
+				signerDigest, _ := getDigestOIDForSignatureAlgorithm(signerCert.Certificate.SignatureAlgorithm)
+				toBeSigned.SetDigestAlgorithm(signerDigest)
+
+				if err := toBeSigned.SignWithoutAttr(signerCert.Certificate, (*signerCert.PrivateKey).(crypto.Signer), SignerInfoConfig{}); err != nil {
+					t.Fatalf("test %s/%s: cannot add signer: %s", sigalgroot, sigalgsigner, err)
+				}
+				if testDetach {
+					toBeSigned.Detach()
+				}
+				signed, err := toBeSigned.Finish()
+				if err != nil {
+					t.Fatalf("test %s/%s: cannot finish signing data: %s", sigalgroot, sigalgsigner, err)
+				}
+				pem.Encode(os.Stdout, &pem.Block{Type: "PKCS7", Bytes: signed})
+				p7, err := Parse(signed)
+				if err != nil {
+					t.Fatalf("test %s/%s: cannot parse signed data: %s", sigalgroot, sigalgsigner, err)
+				}
+				if testDetach {
+					p7.Content = content
+				}
+				if !bytes.Equal(content, p7.Content) {
+					t.Errorf("test %s/%s: content was not found in the parsed data:\n\tExpected: %s\n\tActual: %s", sigalgroot, sigalgsigner, content, p7.Content)
+				}
+				if err := p7.VerifyWithChain(truststore); err != nil {
+					t.Errorf("test %s/%s: cannot verify signed data: %s", sigalgroot, sigalgsigner, err)
+				}
+				if !signerDigest.Equal(p7.Signers[0].DigestAlgorithm.Algorithm) {
+					t.Errorf("test %s/%s: expected digest algorithm %q but got %q",
+						sigalgroot, sigalgsigner, signerDigest, p7.Signers[0].DigestAlgorithm.Algorithm)
+				}
+			}
+		}
+	}
 }
 
 func ExampleSignedData() {

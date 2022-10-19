@@ -1,12 +1,15 @@
 name: CI
 on: [push, pull_request]
 
+env: 
+  GODEBUG: x509sha1=1
+
 jobs:
   test:
     name: Test
     strategy:
       matrix:
-        go: ['1.12', '1.13', '1.14', '1.15', '1.16']
+        go: ['1.13', '1.14', '1.15', '1.16', '1.17', '1.18', '1.19']
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
