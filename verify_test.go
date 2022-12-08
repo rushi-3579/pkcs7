@@ -263,12 +263,12 @@ func TestVerifyFirefoxAddon(t *testing.T) {
 	}
 
 	expiredTime := time.Date(2030, time.January, 1, 0, 0, 0, 0, time.UTC)
-	if err = p7.VerifyWithChainAtTime(certPool, expiredTime); err != nil {
+	if err = p7.VerifyWithChainAtTime(certPool, expiredTime); err == nil {
 		t.Errorf("Verify at expired time %s did not error", expiredTime)
 	}
 
 	notYetValidTime := time.Date(1999, time.July, 5, 0, 13, 0, 0, time.UTC)
-	if err = p7.VerifyWithChainAtTime(certPool, validTime); err != nil {
+	if err = p7.VerifyWithChainAtTime(certPool, notYetValidTime); err == nil {
 		t.Errorf("Verify at not yet valid time %s did not error", notYetValidTime)
 	}
 
