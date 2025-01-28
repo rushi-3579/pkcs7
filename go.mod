@@ -1,3 +1,3 @@
-module github.com/digitorus/pkcs7
+module github.com/rushi-3579/pkcs7
 
 go 1.13
